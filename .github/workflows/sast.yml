@@ -1,0 +1,43 @@
+# Add your SAST workflow configuration here
+# ============================================================================
+# TigerGate — GitHub Actions Pipeline Examples
+# ============================================================================
+# Complete examples for all scan types with the TigerGate CLI.
+# Copy the relevant job(s) into your .github/workflows/ directory.
+#
+# Required secrets:
+#   TIGERGATE_API_KEY  — Your TigerGate CI API key (Settings > CI/CD Keys)
+#   TIGERGATE_API_URL  — Your TigerGate API URL (default: https://app.tigergate.io/api/ci)
+# ============================================================================
+
+name: TigerGate Security Scan
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+env:
+  TIGERGATE_API_KEY: ${{ secrets.TIGERGATE_API_KEY }}
+  TIGERGATE_API_URL: ${{ secrets.TIGERGATE_API_URL || 'https://api.staging.tigergate.dev/api/ci' }}
+jobs:
+  # ─────────────────────────────────────────────────────────
+  # 1a. Full Code Security Scan — Docker Image (RECOMMENDED)
+  # All tools pre-installed, no downloads needed.
+  # ─────────────────────────────────────────────────────────
+  code-security-docker:
+    name: Code Security Scan (Docker)
+    runs-on: ubuntu-latest
+    container:
+      image: tigergate/tigergate-cli:1.0.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Security Scan
+        run: |
+          tigergate scan \
+            --type all \
+            --fail-on critical,high \
+            --quality-gate \
+            --upload
