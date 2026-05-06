@@ -1,0 +1,84 @@
+# ============================================================================
+# SBOM (Software Bill of Materials) — GitHub Actions Pipeline
+# ============================================================================
+# Generates a full SBOM for the repository in CycloneDX and SPDX formats.
+# The SBOM is uploaded as a build artifact and also pushed to TigerGate.
+#
+# Required secrets:
+#   TIGERGATE_API_KEY  — Your TigerGate CI API key (Settings > CI/CD Keys)
+#   TIGERGATE_API_URL  — Your TigerGate API URL
+# ============================================================================
+
+name: SBOM Generation
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  # Allow manual trigger for on-demand SBOM generation
+  workflow_dispatch:
+
+env:
+  TIGERGATE_API_KEY: ${{ secrets.TIGERGATE_API_KEY }}
+  TIGERGATE_API_URL: ${{ secrets.TIGERGATE_API_URL || 'https://api.staging.tigergate.dev/api/ci' }}
+
+jobs:
+  # ─────────────────────────────────────────────────────────
+  # 1. Generate SBOM using Syft (CycloneDX + SPDX formats)
+  # ─────────────────────────────────────────────────────────
+  generate-sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Install Syft (Anchore SBOM generator) ──
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@v0
+        id: syft-install
+
+      # ── Generate CycloneDX SBOM (JSON) ──
+      - name: Generate CycloneDX SBOM
+        run: |
+          syft dir:. \
+            --output cyclonedx-json=sbom-cyclonedx.json \
+            --output cyclonedx-xml=sbom-cyclonedx.xml
+
+      # ── Generate SPDX SBOM (JSON) ──
+      - name: Generate SPDX SBOM
+        run: |
+          syft dir:. \
+            --output spdx-json=sbom-spdx.json
+
+      # ── Upload SBOMs as build artifacts ──
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-reports
+          path: |
+            sbom-cyclonedx.json
+            sbom-cyclonedx.xml
+            sbom-spdx.json
+          retention-days: 90
+
+  # ─────────────────────────────────────────────────────────
+  # 2. SBOM scan via TigerGate CLI (Docker)
+  # ─────────────────────────────────────────────────────────
+  sbom-tigergate:
+    name: TigerGate SBOM Scan
+    runs-on: ubuntu-latest
+    container:
+      image: tigergate/tigergate-cli:1.0.0
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run TigerGate SBOM Scan
+        run: |
+          tigergate scan \
+            --type sbom \
+            --upload
