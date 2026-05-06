@@ -30,7 +30,7 @@ jobs:
     name: Code Security Scan (Docker)
     runs-on: ubuntu-latest
     container:
-      image: tigergate/tigergate-cli:1.0.0
+      image: tigergate/tigergate-cli:1.0.1
     steps:
       - uses: actions/checkout@v4
 
