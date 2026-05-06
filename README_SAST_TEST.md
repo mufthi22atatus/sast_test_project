@@ -1,189 +1,232 @@
-# 🛡️ SAST Test Project – Vulnerability Guide
+# 🛡️ SAST Rule-Based Test Project (README)
 
-This project is a **minimal intentionally vulnerable application** designed to test:
-- SAST (Static Application Security Testing)
-- Code Reviewers (PR-based scanning)
-- Secret detection
-- Container/image scanning
+This repository is a **minimal, rule-driven vulnerable project** designed to reliably trigger SAST (Static Application Security Testing) tools such as Atatus, Snyk, Semgrep, and GitHub Advanced Security.
 
 ---
 
-## 📁 Project Structure
+# 🎯 Objective
+
+The goal of this project is to:
+
+- Trigger **guaranteed SAST detections**
+- Validate **real-time code reviewer behavior**
+- Map **code → rule → vulnerability (CWE)** clearly
+
+---
+
+# 📁 Project Files
 
 ```
-app.js          → Node.js vulnerable endpoints
-config.py       → Hardcoded secret
-command.py      → Command injection example
-Dockerfile      → Vulnerable container image
+app.js        → SQL Injection + XSS
+command.py    → Command Injection + Path Traversal
+config.py     → Hardcoded Secrets + Weak Crypto
+Dockerfile    → Vulnerable container configuration
 ```
 
 ---
 
-## 🚨 Vulnerabilities Included
+# 🚨 Vulnerabilities & Exact SAST Rules
 
-### 1. SQL Injection (Critical)
+---
+
+## 1. SQL Injection (CWE-89)
 
 **File:** `app.js`
 
 ```js
-const query = "SELECT * FROM users WHERE id = " + id;
+const userId = req.query.id;
+const query = "SELECT * FROM users WHERE id = " + userId;
+db.query(query);
 ```
 
-### 🔍 What is the issue?
-User input (`id`) is directly concatenated into a SQL query without validation.
+### 🔍 Rule Pattern
+- **Source:** `req.query.id`
+- **Sink:** SQL query execution (`db.query`)
+- **Condition:** String concatenation without sanitization
 
-### ⚠️ Risk
-Attackers can manipulate queries like:
+### 🧠 Rule Logic
 ```
-?id=1 OR 1=1
+IF user_input → string concatenation → SQL execution
+THEN SQL Injection
 ```
-
-### 💥 Impact
-- Full database dump
-- Authentication bypass
-- Data modification/deletion
-
-### 🛠 Fix
-Use parameterized queries / prepared statements.
 
 ---
 
-### 2. Cross-Site Scripting (XSS)
+## 2. Cross-Site Scripting (XSS) (CWE-79)
 
 **File:** `app.js`
 
 ```js
-res.send("<h1>" + req.query.q + "</h1>");
+const search = req.query.q;
+res.send("<h1>" + search + "</h1>");
 ```
 
-### 🔍 What is the issue?
-User input is directly rendered in HTML.
+### 🔍 Rule Pattern
+- **Source:** `req.query`
+- **Sink:** HTML response (`res.send`)
+- **Condition:** No escaping/encoding
 
-### ⚠️ Risk
-Attackers can inject scripts:
+### 🧠 Rule Logic
 ```
-?q=<script>alert(1)</script>
+IF user_input → HTML response without encoding
+THEN XSS
 ```
-
-### 💥 Impact
-- Session hijacking
-- Credential theft
-- Malicious redirects
-
-### 🛠 Fix
-Escape output or use templating engines with auto-escaping.
 
 ---
 
-### 3. Hardcoded Secret (High)
-
-**File:** `config.py`
-
-```python
-API_KEY = "12345-SECRET-KEY"
-```
-
-### 🔍 What is the issue?
-Sensitive credentials are stored in source code.
-
-### ⚠️ Risk
-Anyone with repo access can use this key.
-
-### 💥 Impact
-- Unauthorized API usage
-- Account compromise
-
-### 🛠 Fix
-Use environment variables or secret managers.
-
----
-
-### 4. Command Injection (Critical)
+## 3. Command Injection (CWE-78)
 
 **File:** `command.py`
 
 ```python
+user_input = input()
 os.system("cat " + user_input)
 ```
 
-### 🔍 What is the issue?
-User input is passed directly to system command.
+### 🔍 Rule Pattern
+- **Source:** `input()`
+- **Sink:** `os.system`
+- **Condition:** Direct concatenation
 
-### ⚠️ Risk
-Attackers can execute arbitrary commands:
+### 🧠 Rule Logic
 ```
-filename.txt; rm -rf /
+IF user_input → system command execution
+THEN Command Injection
 ```
-
-### 💥 Impact
-- Remote code execution
-- System compromise
-
-### 🛠 Fix
-Use safe APIs like `subprocess.run()` with argument list.
 
 ---
 
-### 5. Vulnerable Docker Image (Medium/High)
+## 4. Path Traversal (CWE-22)
+
+**File:** `command.py`
+
+```python
+file_name = input()
+open("/tmp/" + file_name)
+```
+
+### 🔍 Rule Pattern
+- **Source:** User input
+- **Sink:** File path usage
+- **Condition:** No validation
+
+### 🧠 Rule Logic
+```
+IF user_input → file path construction
+THEN Path Traversal
+```
+
+---
+
+## 5. Hardcoded Secrets
+
+**File:** `config.py`
+
+```python
+API_KEY = "sk_live_ABC123SECRET"
+DB_PASSWORD = "rootpassword"
+```
+
+### 🔍 Rule Pattern
+- Keywords: `API_KEY`, `PASSWORD`
+- Value: Hardcoded string literal
+
+### 🧠 Rule Logic
+```
+IF sensitive keyword → hardcoded value
+THEN Secret Exposure
+```
+
+---
+
+## 6. Weak Cryptography (CWE-327)
+
+**File:** `config.py`
+
+```python
+hashlib.md5(password.encode())
+```
+
+### 🔍 Rule Pattern
+- Use of weak algorithm: `MD5`
+
+### 🧠 Rule Logic
+```
+IF MD5/SHA1 used for hashing
+THEN Weak Crypto
+```
+
+---
+
+## 7. Vulnerable Docker Configuration
 
 **File:** `Dockerfile`
 
 ```dockerfile
 FROM node:12
+RUN apt-get install -y curl vim
+COPY . .
 ```
 
-### 🔍 What is the issue?
-Outdated base image with known vulnerabilities.
+### 🔍 Rule Patterns
 
-### ⚠️ Risk
-Includes OS/package CVEs.
+#### a. Outdated Base Image
+- `node:12` → known CVEs
 
-### 💥 Impact
-- Container compromise
-- Supply chain risks
+#### b. Running as Root
+- No USER specified
 
-### 🛠 Fix
-Use updated images like:
+#### c. Broad Copy
+- `COPY . .` → may expose secrets
+
+### 🧠 Rule Logic
 ```
-FROM node:18-alpine
+IF outdated base image → vulnerability
+IF no USER specified → runs as root
+IF COPY . . → potential secret exposure
 ```
 
 ---
 
-## 🎯 Expected Findings in Code Reviewer
+# 📊 Expected SAST Findings
 
-| Vulnerability        | Severity   | Detection Type |
-|---------------------|-----------|---------------|
-| SQL Injection       | Critical  | SAST          |
-| XSS                 | High      | SAST          |
-| Command Injection   | Critical  | SAST          |
-| Hardcoded Secret    | High      | Secrets       |
-| Vulnerable Image    | Medium    | SCA / Image   |
+| Vulnerability        | CWE     | Severity  |
+|---------------------|--------|----------|
+| SQL Injection       | CWE-89 | Critical |
+| XSS                 | CWE-79 | High     |
+| Command Injection   | CWE-78 | Critical |
+| Path Traversal      | CWE-22 | High     |
+| Hardcoded Secrets   | -      | High     |
+| Weak Crypto (MD5)   | CWE-327| Medium   |
+| Docker Issues       | -      | Medium   |
 
 ---
 
-## 🧪 How to Test
+# 🧪 Testing Instructions
 
-1. Push this repo to your Git provider.
-2. Enable your security scanning tool.
-3. Run scan or create PR.
+1. Push this repo to your Git platform
+2. Enable SAST scanning
+3. Run scan or open PR
 4. Verify:
    - Issues are detected
-   - File + line numbers are correct
-   - Severity is assigned properly
+   - Correct severity assigned
+   - File + line mapping works
 
 ---
 
-## ⚠️ Disclaimer
+# ⚠️ Notes
 
-This project is intentionally insecure.  
-Do NOT use in production.
+- This project is **intentionally insecure**
+- Designed for **testing only**
+- Do NOT deploy in production
 
 ---
 
-## ✅ Goal
+# ✅ Key Insight
 
-This repo helps you:
-- Validate SAST pipeline
-- Test real-time code review detection
-- Demonstrate vulnerabilities quickly
+This repo is **rule-driven**, not random.
+
+Each vulnerability exists specifically to match:
+- Source → Sink pattern
+- Known SAST rule signatures
+- Industry-standard CWE mappings
