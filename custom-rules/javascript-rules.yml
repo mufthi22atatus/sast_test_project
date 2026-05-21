@@ -1,0 +1,172 @@
+# ============================================================================
+# TigerGate Custom Rules — JavaScript / Node.js
+# ============================================================================
+# Each rule below matches a specific vulnerability pattern in the test files.
+# Import these into TigerGate: Settings > Custom Rules > New Custom Rule
+# ============================================================================
+
+rules:
+
+  # ── Rule 1: SQL Injection via string concatenation ────────────────────────
+  # Trigger file: app.js, vuln_sqli.js
+  - id: tg-js-sql-injection-concat
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      SQL query built using string concatenation with user input
+      from req.query / req.params / req.body. Use parameterized
+      queries or prepared statements.
+    patterns:
+      - pattern: |
+          $DB.query("..." + $INPUT + "...")
+      - pattern: |
+          $DB.query(`...${$INPUT}...`)
+    metadata:
+      category: security
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 2: Reflected XSS via res.send ────────────────────────────────────
+  # Trigger file: app.js, vuln_xss.js
+  - id: tg-js-xss-res-send
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      User input from req.query / req.params is directly reflected
+      in res.send() without HTML encoding. This enables XSS attacks.
+      Sanitize output or use a templating engine with auto-escaping.
+    patterns:
+      - pattern: res.send("..." + $USER_INPUT + "...")
+      - pattern: res.send(`...${$USER_INPUT}...`)
+    metadata:
+      category: security
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+      confidence: HIGH
+      impact: HIGH
+
+  # ── Rule 3: eval() with dynamic input ─────────────────────────────────────
+  # Trigger file: vuln_eval.js
+  - id: tg-js-eval-injection
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      eval() called with user-controlled input. This allows arbitrary
+      JavaScript code execution. Never use eval() with external data.
+    pattern: |
+      eval($USER_INPUT)
+    metadata:
+      category: security
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 4: child_process command injection ───────────────────────────────
+  # Trigger file: vuln_cmd.js
+  - id: tg-js-child-process-exec
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      child_process.exec() called with dynamic input. Use
+      child_process.execFile() with an array of arguments to
+      prevent shell injection.
+    patterns:
+      - pattern: exec($CMD + $INPUT, ...)
+      - pattern: exec(`...${$INPUT}...`, ...)
+    metadata:
+      category: security
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 5: Hardcoded JWT secret ──────────────────────────────────────────
+  # Trigger file: vuln_secrets.js
+  - id: tg-js-hardcoded-jwt-secret
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      JWT signed with a hardcoded secret string. Anyone who reads the
+      source code can forge valid tokens. Use an environment variable
+      or key management service.
+    patterns:
+      - pattern: jwt.sign($PAYLOAD, "...", ...)
+      - pattern: jwt.verify($TOKEN, "...", ...)
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 6: NoSQL injection (MongoDB) ─────────────────────────────────────
+  # Trigger file: vuln_nosql.js
+  - id: tg-js-nosql-injection
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      MongoDB query built with unsanitized request body. An attacker
+      can inject query operators like $gt, $ne to bypass authentication.
+      Validate and sanitize input before passing to find/findOne.
+    patterns:
+      - pattern: |
+          $COLLECTION.find({...: req.body.$FIELD})
+      - pattern: |
+          $COLLECTION.findOne({...: req.body.$FIELD})
+    metadata:
+      category: security
+      cwe: "CWE-943: Improper Neutralization of Special Elements in Data Query Logic"
+      confidence: MEDIUM
+      impact: HIGH
+
+  # ── Rule 7: Insecure cookie — no httpOnly/secure ─────────────────────────
+  # Trigger file: vuln_cookies.js
+  - id: tg-js-insecure-cookie
+    languages: [javascript]
+    severity: WARNING
+    message: >
+      Cookie set without httpOnly or secure flags. Session cookies
+      can be stolen via XSS or transmitted over unencrypted HTTP.
+    patterns:
+      - pattern: res.cookie($NAME, $VALUE)
+      - pattern: res.cookie($NAME, $VALUE, {httpOnly: false, ...})
+    metadata:
+      category: security
+      cwe: "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+      confidence: MEDIUM
+      impact: MEDIUM
+
+  # ── Rule 8: Directory traversal in path.join ──────────────────────────────
+  # Trigger file: vuln_path.js
+  - id: tg-js-path-traversal
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      path.join() used with user input without validating the result
+      stays within the intended directory. Attackers can use ../
+      sequences to escape.
+    patterns:
+      - pattern: path.join($BASE, req.query.$PARAM)
+      - pattern: path.join($BASE, req.params.$PARAM)
+      - pattern: path.join($BASE, req.body.$PARAM)
+    metadata:
+      category: security
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
+      confidence: HIGH
+      impact: HIGH
+
+  # ── Rule 9: Prototype pollution via merge/extend ─────────────────────────
+  # Trigger file: vuln_prototype.js
+  - id: tg-js-prototype-pollution
+    languages: [javascript]
+    severity: ERROR
+    message: >
+      Deep merge / object.assign with user-controlled keys can lead
+      to prototype pollution. Validate that __proto__, constructor,
+      and prototype keys are rejected.
+    patterns:
+      - pattern: |
+          $TARGET[$KEY] = $VALUE
+    metadata:
+      category: security
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+      confidence: LOW
+      impact: HIGH
