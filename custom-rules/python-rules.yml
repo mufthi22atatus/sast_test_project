@@ -1,0 +1,251 @@
+# ============================================================================
+# TigerGate Custom Rules — Python
+# ============================================================================
+# Each rule below matches a specific vulnerability pattern in the test files.
+# Import these into TigerGate: Settings > Custom Rules > New Custom Rule
+# Then paste the individual rule body (id → metadata block) into the YAML editor.
+# ============================================================================
+
+rules:
+
+  # ── Rule 1: Dangerous eval() with user input ──────────────────────────────
+  # Trigger file: vuln_eval.py
+  - id: tg-py-eval-user-input
+    languages: [python]
+    severity: ERROR
+    message: >
+      Dangerous use of eval() with user-controlled input.
+      eval() executes arbitrary Python code — an attacker can achieve
+      full remote code execution by injecting malicious expressions.
+    pattern: |
+      eval($USER_INPUT)
+    metadata:
+      category: security
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 2: exec() with user input ────────────────────────────────────────
+  # Trigger file: vuln_eval.py
+  - id: tg-py-exec-user-input
+    languages: [python]
+    severity: ERROR
+    message: >
+      exec() called with user-supplied data. This allows arbitrary
+      Python code execution and full system compromise.
+    pattern: |
+      exec($USER_INPUT)
+    metadata:
+      category: security
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 3: os.system() command injection ─────────────────────────────────
+  # Trigger file: command.py, vuln_cmd.py
+  - id: tg-py-os-system-injection
+    languages: [python]
+    severity: ERROR
+    message: >
+      os.system() called with string concatenation or formatting.
+      User input in shell commands leads to command injection.
+      Use subprocess with a list of arguments instead.
+    patterns:
+      - pattern: os.system($CMD + $INPUT)
+      - pattern: os.system(f"...{$INPUT}...")
+      - pattern: os.system($CMD.format(...))
+    metadata:
+      category: security
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 4: subprocess.call with shell=True ───────────────────────────────
+  # Trigger file: vuln_cmd.py
+  - id: tg-py-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: >
+      subprocess called with shell=True and dynamic input.
+      This enables shell injection. Use shell=False with a list
+      of arguments instead.
+    patterns:
+      - pattern: subprocess.call($CMD, shell=True, ...)
+      - pattern: subprocess.Popen($CMD, shell=True, ...)
+      - pattern: subprocess.run($CMD, shell=True, ...)
+    metadata:
+      category: security
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 5: MD5 / SHA1 weak hashing ──────────────────────────────────────
+  # Trigger file: config.py, vuln_crypto.py
+  - id: tg-py-weak-hash-md5
+    languages: [python]
+    severity: WARNING
+    message: >
+      MD5 is cryptographically broken and must not be used for
+      password hashing or data integrity. Use bcrypt, scrypt, or
+      argon2 for passwords; SHA-256+ for integrity checks.
+    pattern: |
+      hashlib.md5(...)
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: HIGH
+      impact: MEDIUM
+
+  - id: tg-py-weak-hash-sha1
+    languages: [python]
+    severity: WARNING
+    message: >
+      SHA1 is deprecated for security use. Use SHA-256 or stronger.
+    pattern: |
+      hashlib.sha1(...)
+    metadata:
+      category: security
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      confidence: HIGH
+      impact: MEDIUM
+
+  # ── Rule 6: Hardcoded passwords / API keys ────────────────────────────────
+  # Trigger file: config.py, vuln_secrets.py
+  - id: tg-py-hardcoded-password
+    languages: [python]
+    severity: ERROR
+    message: >
+      Password or secret is hardcoded in source code. Use environment
+      variables or a secrets manager instead.
+    patterns:
+      - pattern: PASSWORD = "..."
+      - pattern: password = "..."
+      - pattern: DB_PASSWORD = "..."
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      confidence: MEDIUM
+      impact: HIGH
+
+  - id: tg-py-hardcoded-api-key
+    languages: [python]
+    severity: ERROR
+    message: >
+      API key is hardcoded. Rotate immediately and use environment
+      variables or a vault.
+    patterns:
+      - pattern: API_KEY = "..."
+      - pattern: SECRET_KEY = "..."
+      - pattern: AWS_SECRET_ACCESS_KEY = "..."
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      confidence: MEDIUM
+      impact: HIGH
+
+  # ── Rule 7: Pickle deserialization ────────────────────────────────────────
+  # Trigger file: vuln_deserialize.py
+  - id: tg-py-pickle-load
+    languages: [python]
+    severity: ERROR
+    message: >
+      pickle.loads() / pickle.load() deserializes arbitrary Python
+      objects. Untrusted data can execute arbitrary code on load.
+      Use JSON or a safe serialization format.
+    patterns:
+      - pattern: pickle.loads($DATA)
+      - pattern: pickle.load($FILE)
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 8: YAML unsafe load ──────────────────────────────────────────────
+  # Trigger file: vuln_deserialize.py
+  - id: tg-py-yaml-unsafe-load
+    languages: [python]
+    severity: ERROR
+    message: >
+      yaml.load() without Loader=SafeLoader can execute arbitrary
+      Python code. Use yaml.safe_load() instead.
+    pattern: |
+      yaml.load($DATA)
+    metadata:
+      category: security
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 9: Flask debug mode in production ────────────────────────────────
+  # Trigger file: vuln_flask.py
+  - id: tg-py-flask-debug-mode
+    languages: [python]
+    severity: WARNING
+    message: >
+      Flask app running with debug=True. This exposes the interactive
+      debugger and allows arbitrary code execution from the browser.
+      Never enable debug mode in production.
+    pattern: |
+      app.run(..., debug=True, ...)
+    metadata:
+      category: security
+      cwe: "CWE-215: Insertion of Sensitive Information Into Debugging Code"
+      confidence: HIGH
+      impact: HIGH
+
+  # ── Rule 10: SQL injection via string formatting ──────────────────────────
+  # Trigger file: vuln_sqli.py
+  - id: tg-py-sql-injection-format
+    languages: [python]
+    severity: ERROR
+    message: >
+      SQL query built with f-string or .format(). User input flows
+      directly into the query, enabling SQL injection.
+      Use parameterized queries instead.
+    patterns:
+      - pattern: cursor.execute(f"...{$INPUT}...")
+      - pattern: cursor.execute("...".format($INPUT))
+      - pattern: cursor.execute("..." + $INPUT + "...")
+      - pattern: cursor.execute("..." % $INPUT)
+    metadata:
+      category: security
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      confidence: HIGH
+      impact: CRITICAL
+
+  # ── Rule 11: SSRF — requests with user-controlled URL ─────────────────────
+  # Trigger file: vuln_ssrf.py
+  - id: tg-py-ssrf-requests
+    languages: [python]
+    severity: ERROR
+    message: >
+      HTTP request made to a user-controlled URL. An attacker can
+      reach internal services (metadata APIs, databases) via SSRF.
+      Validate and allowlist target URLs.
+    patterns:
+      - pattern: requests.get($USER_URL, ...)
+      - pattern: requests.post($USER_URL, ...)
+    metadata:
+      category: security
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      confidence: MEDIUM
+      impact: HIGH
+
+  # ── Rule 12: open() path traversal ────────────────────────────────────────
+  # Trigger file: command.py, vuln_path.py
+  - id: tg-py-path-traversal-open
+    languages: [python]
+    severity: ERROR
+    message: >
+      File opened with a path that includes user-controlled input
+      without validation. An attacker can read arbitrary files
+      using ../ sequences.
+    patterns:
+      - pattern: open($BASE + $USER_INPUT, ...)
+      - pattern: open(f"...{$USER_INPUT}...", ...)
+    metadata:
+      category: security
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
+      confidence: HIGH
+      impact: HIGH
